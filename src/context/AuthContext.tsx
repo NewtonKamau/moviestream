@@ -13,6 +13,7 @@ interface AuthContextType {
   signup: (email: string, password: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -28,26 +29,52 @@ export const useAuth = () => {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
-      setLoading(false);
-    });
+    const unsubscribe = onAuthStateChanged(auth, 
+      (user) => {
+        setUser(user);
+        setLoading(false);
+      },
+      (error) => {
+        console.error('Auth state change error:', error);
+        setAuthError(error.message);
+        setLoading(false);
+      }
+    );
 
     return unsubscribe;
   }, []);
 
   const signup = async (email: string, password: string) => {
-    await createUserWithEmailAndPassword(auth, email, password);
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      setUser(userCredential.user);
+    } catch (error) {
+      console.error('Signup error:', error);
+      throw error;
+    }
   };
 
   const login = async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email, password);
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      setUser(userCredential.user);
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
+    }
   };
 
   const logout = async () => {
-    await signOut(auth);
+    try {
+      await signOut(auth);
+      setUser(null);
+    } catch (error) {
+      console.error('Logout error:', error);
+      throw error;
+    }
   };
 
   const value = {
@@ -55,7 +82,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     signup,
     login,
     logout,
+    loading
   };
+
+  if (authError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <div className="bg-red-500 text-white p-4 rounded-md">
+          <h2 className="text-lg font-bold">Authentication Error</h2>
+          <p>{authError}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <AuthContext.Provider value={value}>
